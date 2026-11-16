@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { fLong, T, uniq } from '../../config/workshopConfig';
 import type { EntryRecord, LangId, ModuleResponse, UserMe, WorkshopSettings } from '../../types/workshop';
-import { DateBar, EntryList, LockNote, TopBar, WhoBox } from '../CommonUI';
+import { DateBar, EntryList, LockNote, TopBar } from '../CommonUI';
 
 export interface ModuleViewProps {
   me: UserMe;
@@ -51,7 +51,6 @@ export const ReleasePackView: React.FC<ModuleViewProps> = ({
   const isMgr = me.role === 'Admin' || me.role === 'Manager';
   const [round, setRound] = useState<string>('');
   const [extraRounds, setExtraRounds] = useState<string[]>([]);
-  const [names, setNames] = useState<string[]>([]);
 
   const allRounds = (() => {
     const r = [...(settings.rounds || ['Urgent', 'Lot 1 – Morning', 'Lot 2 – Evening'])];
@@ -105,12 +104,7 @@ export const ReleasePackView: React.FC<ModuleViewProps> = ({
   const packCount = storeList.filter((s) => cell(s, 'Pack').length > 0).length;
 
   const handleTap = async (store: string, type: 'Release' | 'Pack') => {
-    if (isMgr && !names.length) {
-      onToast(`① ${T('Choose at least one name', lang)}`, 'err');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
-    const useNames = isMgr ? [...names] : [me.name];
+    const useNames = [me.name];
     const r = await onApi<ModuleResponse>('e.add', {
       mod: 'rp',
       date,
@@ -179,27 +173,9 @@ export const ReleasePackView: React.FC<ModuleViewProps> = ({
         </div>
 
         <div className="card">
-          <div className="steph">
-            <span className="stepn">1</span>
-            {T(isMgr ? 'Tap names' : 'Who did it?', lang)}
-          </div>
-          <div className="mt">
-            <WhoBox
-              me={me}
-              settings={settings}
-              value={names}
-              multi
-              onToggle={(n) => setNames((prev) => (prev.includes(n) ? prev.filter((x) => x !== n) : [...prev, n]))}
-              onAddOffice={() => onAddList('teams.office')}
-              lang={lang}
-            />
-          </div>
-        </div>
-
-        <div className="card">
           <div className="steph between">
             <span className="flex" style={{ gap: 8 }}>
-              <span className="stepn">2</span>
+              <span className="stepn">1</span>
               {T('Tap store', lang)}
             </span>
             <span className="badge b-gold" style={{ marginLeft: 'auto' }}>

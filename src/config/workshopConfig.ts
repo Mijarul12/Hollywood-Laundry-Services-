@@ -363,7 +363,6 @@ export const FORMS: Record<'repair' | 'spot' | 'quickfix' | 'washerr', FormField
     { k: 'spot', t: 'list', src: 'spotTypes', l: 'Spot type' },
     { k: 'tag', t: 'text', l: 'Barcode / Tag no.', caps: true },
     { k: 'pct', t: 'pct', l: 'How much removed?' },
-    { k: 'by', t: 'list', src: 'teams.spot', l: 'Who did it?' },
   ],
   quickfix: [
     { k: 'store', t: 'store', l: 'Store' },
@@ -379,7 +378,6 @@ export const FORMS: Record<'repair' | 'spot' | 'quickfix' | 'washerr', FormField
       l: 'Type',
     },
     { k: 'tag', t: 'text', l: 'Barcode / Tag no.', caps: true },
-    { k: 'by', t: 'list', src: 'teams.qf', l: 'Who did it?' },
   ],
   washerr: [
     { k: 'store', t: 'store', l: 'Store' },
@@ -725,7 +723,6 @@ export const RMENU: [string, [string, string, string][]][] = [
 ];
 
 export const SPANELS: [string, string, string, string, boolean?][] = [
-  ['general', 'General', 'gear', 'Colour theme · units'],
   ['stores', 'Stores', 'box', 'Codes, file names, UL / PC, email'],
   ['staff', 'Staff', 'user', 'Office, ironmen, washing, spot, quick fix'],
   ['lists', 'Lists', 'grc', 'Garments, damage, repair, saree, rounds…'],

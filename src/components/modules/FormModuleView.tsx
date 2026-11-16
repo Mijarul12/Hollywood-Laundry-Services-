@@ -248,7 +248,7 @@ export const FormModuleView: React.FC<
             </div>
             <LockNote isMgr={isMgr} lang={lang} />
             {(isMgr || date === today) && (
-              <SaveBar meName={me.name} unit={unit} label={T('Save', lang)} onSave={handleSave} />
+              <SaveBar inline meName={me.name} unit={unit} label={T('Save', lang)} onSave={handleSave} />
             )}
           </div>
 

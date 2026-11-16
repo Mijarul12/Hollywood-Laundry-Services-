@@ -1458,6 +1458,30 @@ main.wide {
   width: 38px;
 }
 
+.rows.rw .r {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px 12px;
+}
+
+.rows.rw .nm {
+  grid-column: 1;
+}
+
+.rows.rw .tbox {
+  grid-column: 2;
+  justify-self: end;
+}
+
+.rows.rw .rw-field {
+  min-width: 0;
+}
+
+.rows.rw .rw-field .step.sm {
+  width: 100%;
+  max-width: 144px;
+  height: 38px;
+}
+
 @media (min-width: 760px) {
   .rows.iron .r {
     grid-template-columns: minmax(150px, 1.1fr) 76px 140px minmax(140px, 210px) !important;
@@ -1466,9 +1490,14 @@ main.wide {
     grid-column: auto;
   }
   .rows.rw .r {
-    grid-template-columns: 200px 84px 186px 186px;
+    grid-template-columns: minmax(160px, 1fr) 82px 142px 142px;
     justify-content: start;
-    column-gap: 18px;
+    column-gap: 16px;
+  }
+  .rows.rw .nm,
+  .rows.rw .tbox {
+    grid-column: auto;
+    justify-self: auto;
   }
   .rows.rw .full,
   .rows.iron .full {
@@ -1505,16 +1534,82 @@ main.wide {
   }
 }
 
+.se-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 4px 10px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--line2);
+}
+
+.se-check-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--navy);
+  cursor: pointer;
+}
+
+.se-cb {
+  width: 19px;
+  height: 19px;
+  min-width: 19px;
+  min-height: 19px;
+  padding: 0;
+  accent-color: var(--gold);
+  cursor: pointer;
+  flex: none;
+}
+
 .rows.se .r {
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px 12px;
+}
+
+.rows.se .se-who {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.rows.se .se-entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rows.se .se-entry .rmk {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+}
+
+.rows.se .se-save-btn {
+  min-height: 36px;
+  height: 36px;
+  padding: 0 12px;
+  font-size: 13px;
+  border-radius: 10px;
+  white-space: nowrap;
+  flex: none;
+}
+
+.se-save-all-row {
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 @media (min-width: 760px) {
   .rows.se .r {
-    grid-template-columns: 220px 68px minmax(160px, 280px);
-  }
-  .rows.se .full {
-    grid-column: auto;
+    grid-template-columns: 220px minmax(220px, 1fr);
   }
 }
 
@@ -2318,6 +2413,19 @@ main.wide {
   display: flex;
   gap: 10px;
   align-items: center;
+}
+
+.savebar-inline {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line2);
+}
+
+.savebar-inline .row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 .pill {
@@ -3125,7 +3233,23 @@ main.wide {
 
 .urow {
   border-bottom: 1px solid var(--line2);
-  padding: 10px 0;
+  padding: 12px 0;
+}
+
+.urow.is-new {
+  background: rgba(247, 207, 135, 0.14);
+  border: 1.5px solid var(--gold);
+  border-radius: 14px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.card-save-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line2);
 }
 
 .urow .g {
@@ -3254,6 +3378,7 @@ main.wide {
   overflow: hidden;
   flex: none;
   display: block;
+  position: relative;
   background: var(--bg2) center/40% no-repeat;
   padding: 0;
 }
@@ -3266,8 +3391,24 @@ main.wide {
 }
 
 .wph.big {
-  width: 140px;
-  height: 140px;
+  width: 100%;
+  height: 100%;
+  min-height: 118px;
+}
+
+.wphtag {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(16, 28, 46, 0.84);
+  color: var(--cream);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  pointer-events: none;
 }
 
 .wph.noimg img {
@@ -3302,64 +3443,122 @@ main.wide {
   padding: 7px 8px;
 }
 
-.phrow {
-  display: flex;
+.phgrid4 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
-  flex-wrap: wrap;
+}
+
+@media (min-width: 640px) {
+  .phgrid4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.phslot {
+  position: relative;
+  min-height: 126px;
+}
+
+.phbadge {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  z-index: 2;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--navy);
+  color: var(--cream);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  pointer-events: none;
+}
+
+.phslot.filled .phbadge {
+  display: none;
 }
 
 .phbox {
   position: relative;
+  width: 100%;
+  height: 126px;
 }
 
 .phx {
   position: absolute;
-  top: -8px;
-  right: -8px;
-  width: 28px;
-  height: 28px;
+  top: -7px;
+  right: -7px;
+  z-index: 3;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   background: var(--bad);
   color: #fff;
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 800;
   box-shadow: var(--sh);
 }
 
-.phadd {
-  width: 140px;
-  height: 140px;
+.phadd-slot {
+  width: 100%;
+  height: 126px;
   border-radius: 14px;
-  border: 2px dashed var(--gold2);
-  background: linear-gradient(180deg, #fff, var(--goldbg));
+  border: 1.8px dashed var(--gold2);
+  background: linear-gradient(180deg, #ffffff, var(--goldbg));
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  color: var(--gold);
+  gap: 3px;
+  color: var(--navy);
   text-align: center;
-  padding: 8px;
+  padding: 18px 8px 8px;
+  transition: transform 0.12s ease, border-color 0.12s ease;
 }
 
-.phadd b {
-  font-size: 14px;
+.phadd-slot:hover {
+  border-color: var(--gold);
+  transform: translateY(-1px);
+}
+
+.phadd-slot b {
+  font-size: 13px;
   color: var(--ink);
+  line-height: 1.1;
 }
 
-.phadd small {
-  font-size: 11px;
+.phadd-slot small {
+  font-size: 10.5px;
+  color: var(--muted);
+  line-height: 1.1;
+}
+
+.phsvg {
+  width: 44px;
+  height: 44px;
+  color: var(--navy2);
+  flex: none;
 }
 
 .phs {
   display: flex;
   gap: 6px;
+  flex-wrap: wrap;
   flex: none;
+  max-width: 136px;
 }
 
 .phs .wph {
   width: 60px;
   height: 60px;
+}
+
+.phs .wphtag {
+  left: 3px;
+  bottom: 3px;
+  padding: 1px 4px;
+  font-size: 9px;
 }
 
 /* ── print & PDF preview ── */

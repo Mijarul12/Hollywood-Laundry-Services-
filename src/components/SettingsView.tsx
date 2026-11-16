@@ -8,7 +8,6 @@ import {
   PROCESS_M,
   SPANELS,
   T,
-  THEMES,
   uniq,
 } from '../config/workshopConfig';
 import type {
@@ -22,6 +21,11 @@ import type {
 } from '../types/workshop';
 import { ModalSheet, TopBar } from './CommonUI';
 import { Ico } from './Icons';
+
+interface EditableUser extends UserRecord {
+  _origName?: string;
+  _isNew?: boolean;
+}
 
 function cloneSettings(s: WorkshopSettings): WorkshopSettings {
   return JSON.parse(JSON.stringify(s));
@@ -37,11 +41,28 @@ function setSettingPath(obj: any, path: string, val: any) {
   cur[keys[keys.length - 1]] = val;
 }
 
+function toEditableUsers(list: UserRecord[]): EditableUser[] {
+  return list.map((u) => ({ ...u, _origName: u.name, _isNew: false }));
+}
+
+function stripEditableUser(u: EditableUser): UserRecord {
+  return {
+    name: u.name.trim(),
+    role: u.role,
+    pin: u.pin ? u.pin.trim() : undefined,
+    modules: [...(u.modules || [])],
+    active: u.active !== false,
+    units: [...(u.units || [])],
+  };
+}
+
 const ListEditorCard: React.FC<{
   title: string;
   items: string[];
+  saveLabel?: string;
   onChange: (next: string[]) => void;
-}> = ({ title, items, onChange }) => {
+  onSave: () => void;
+}> = ({ title, items, saveLabel = 'Save', onChange, onSave }) => {
   const [draft, setDraft] = useState('');
 
   const addItem = () => {
@@ -84,6 +105,11 @@ const ListEditorCard: React.FC<{
           + Add
         </button>
       </div>
+      <div className="card-save-row">
+        <button type="button" className="btn gold btn-save" onClick={onSave}>
+          <Ico name="check" /> {saveLabel}
+        </button>
+      </div>
     </div>
   );
 };
@@ -99,7 +125,7 @@ export const SettingsView: React.FC<{
   onPickUnit: () => void;
   onApi: <T = any>(action: string, p?: Record<string, any>, quiet?: boolean) => Promise<T>;
   onSettingsUpdated: (next: WorkshopSettings) => void;
-  onPreviewTheme: (theme: ThemeId) => void;
+  onPreviewTheme?: (theme: ThemeId) => void;
   onToast: (msg: string, kind?: '' | 'ok' | 'err') => void;
   onConfirm: (title: string, msg: string, fn: () => void, danger?: boolean) => void;
   onLoading: (on: boolean, msg?: string) => void;
@@ -114,14 +140,14 @@ export const SettingsView: React.FC<{
   onPickUnit,
   onApi,
   onSettingsUpdated,
-  onPreviewTheme,
   onToast,
   onConfirm,
   onLoading,
 }) => {
   const [panel, setPanel] = useState<string | null>(null);
   const [draft, setDraft] = useState<WorkshopSettings>(() => cloneSettings(settings));
-  const [users, setUsers] = useState<UserRecord[] | null>(null);
+  const [users, setUsers] = useState<EditableUser[] | null>(null);
+  const [savedUsers, setSavedUsers] = useState<UserRecord[]>([]);
   const [stats, setStats] = useState<BackupStats | null>(null);
   const [exportModal, setExportModal] = useState<{
     filename: string;
@@ -141,7 +167,8 @@ export const SettingsView: React.FC<{
     if (id === 'users' && !users) {
       try {
         const list = await onApi<UserRecord[]>('users.list', {}, true);
-        setUsers(list);
+        setSavedUsers(list);
+        setUsers(toEditableUsers(list));
       } catch (e: any) {
         onToast(e.message || 'Failed to load users', 'err');
       }
@@ -156,8 +183,12 @@ export const SettingsView: React.FC<{
     }
   };
 
-  const handleSaveSettings = async () => {
-    const clean = cloneSettings(draft);
+  const saveSectionSettings = async (
+    applySection: (base: WorkshopSettings, currentDraft: WorkshopSettings) => void,
+    label?: string
+  ) => {
+    const clean = cloneSettings(settings);
+    applySection(clean, draft);
     clean.units = clean.units.map((u) => u.trim().toUpperCase()).filter(Boolean);
     if (!clean.units.length) {
       onToast('Keep at least one unit', 'err');
@@ -173,15 +204,71 @@ export const SettingsView: React.FC<{
       .filter((s) => s.code);
     const res = await onApi<WorkshopSettings>('settings.save', { settings: clean });
     onSettingsUpdated(res);
-    setDraft(cloneSettings(res));
-    onToast(`✓ ${T('Saved', lang)}`, 'ok');
+    setDraft((prev) => {
+      const nextDraft = cloneSettings(prev);
+      applySection(nextDraft, res);
+      return nextDraft;
+    });
+    onToast(`✓ ${label ? `${label} saved` : T('Saved', lang)}`, 'ok');
   };
 
-  const handleSaveUsers = async () => {
+  const handleSaveSingleUser = async (idx: number) => {
     if (!users) return;
-    const clean = users.filter((u) => u.name.trim());
+    const target = users[idx];
+    if (!target) return;
+    const trimmedName = target.name.trim();
+    if (!trimmedName) {
+      onToast('Enter user name', 'err');
+      return;
+    }
+    const pin = (target.pin || '').trim();
+    if (target._isNew && !/^\d{4}$/.test(pin)) {
+      onToast(`Enter a 4-digit PIN for ${trimmedName}`, 'err');
+      return;
+    }
+    if (!target._isNew && pin && !/^\d{4}$/.test(pin)) {
+      onToast('PIN must be 4 digits', 'err');
+      return;
+    }
+    const cleanTarget = stripEditableUser(target);
+    const origKey = (target._origName || '').toLowerCase();
+    const dup = savedUsers.some(
+      (x) => x.name.toLowerCase() === trimmedName.toLowerCase() && x.name.toLowerCase() !== origKey
+    );
+    if (dup) {
+      onToast(`Name used twice: ${trimmedName}`, 'err');
+      return;
+    }
+
+    const baseList = savedUsers.map((x) => ({ ...x }));
+    const matchIdx = origKey ? baseList.findIndex((x) => x.name.toLowerCase() === origKey) : -1;
+    if (matchIdx >= 0) {
+      baseList[matchIdx] = cleanTarget;
+    } else {
+      baseList.push(cleanTarget);
+    }
+
+    const res = await onApi<UserRecord[]>('users.save', { users: baseList });
+    setSavedUsers(res);
+    const savedRecord = res.find((x) => x.name.toLowerCase() === trimmedName.toLowerCase());
+    setUsers((prev) => {
+      if (!prev) return toEditableUsers(res);
+      return prev.map((row, i) => {
+        if (i === idx && savedRecord) {
+          return { ...savedRecord, _origName: savedRecord.name, _isNew: false };
+        }
+        return row;
+      });
+    });
+    onToast(`✓ ${trimmedName} ${T('Saved', lang).toLowerCase()}`, 'ok');
+  };
+
+  const handleSaveAllUsers = async () => {
+    if (!users) return;
+    const clean = users.filter((u) => u.name.trim()).map(stripEditableUser);
     const res = await onApi<UserRecord[]>('users.save', { users: clean });
-    setUsers(res);
+    setSavedUsers(res);
+    setUsers(toEditableUsers(res));
     onToast(`✓ ${T('Saved', lang)}`, 'ok');
   };
 
@@ -285,43 +372,6 @@ export const SettingsView: React.FC<{
     if (!panel) return null;
 
     switch (panel) {
-      case 'general':
-        return (
-          <div className="sgrid">
-            <div className="card">
-              <b>Colour theme</b>
-              <p className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-                Tap to preview. Save to apply for all users.
-              </p>
-              <div className="themes mt">
-                {THEMES.map(([id, name, cols]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    className={draft.theme === id ? 'on' : ''}
-                    onClick={() => {
-                      setDraft((prev) => ({ ...prev, theme: id }));
-                      onPreviewTheme(id);
-                    }}
-                  >
-                    <div className="sw">
-                      {cols.map((c) => (
-                        <i key={c} style={{ background: c }} />
-                      ))}
-                    </div>
-                    {name}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <ListEditorCard
-              title="Workshop units"
-              items={draft.units}
-              onChange={(next) => setDraft((prev) => ({ ...prev, units: next.map((u) => u.toUpperCase()) }))}
-            />
-          </div>
-        );
-
       case 'stores':
         return (
           <div className="card">
@@ -422,6 +472,19 @@ export const SettingsView: React.FC<{
                 />
               </div>
             ))}
+            <div className="card-save-row">
+              <button
+                type="button"
+                className="btn gold btn-save"
+                onClick={() =>
+                  saveSectionSettings((base, cur) => {
+                    base.stores = cloneSettings(cur).stores;
+                  }, 'Stores')
+                }
+              >
+                <Ico name="check" /> {T('Save', lang)}
+              </button>
+            </div>
           </div>
         );
 
@@ -433,7 +496,13 @@ export const SettingsView: React.FC<{
                 key={path}
                 title={title}
                 items={(getSettingPath(draft, path) as string[]) || []}
+                saveLabel={T('Save', lang)}
                 onChange={(next) => updateList(path, next)}
+                onSave={() =>
+                  saveSectionSettings((base, cur) => {
+                    setSettingPath(base, path, [...((getSettingPath(cur, path) as string[]) || [])]);
+                  }, title)
+                }
               />
             ))}
           </div>
@@ -447,7 +516,13 @@ export const SettingsView: React.FC<{
                 key={path}
                 title={title}
                 items={(getSettingPath(draft, path) as string[]) || []}
+                saveLabel={T('Save', lang)}
                 onChange={(next) => updateList(path, next)}
+                onSave={() =>
+                  saveSectionSettings((base, cur) => {
+                    setSettingPath(base, path, [...((getSettingPath(cur, path) as string[]) || [])]);
+                  }, title)
+                }
               />
             ))}
             <div className="card">
@@ -478,6 +553,19 @@ export const SettingsView: React.FC<{
                     ))}
                   </tbody>
                 </table>
+              </div>
+              <div className="card-save-row">
+                <button
+                  type="button"
+                  className="btn gold btn-save"
+                  onClick={() =>
+                    saveSectionSettings((base, cur) => {
+                      base.damagePoints = { ...(cur.damagePoints || {}) };
+                    }, 'Severity points')
+                  }
+                >
+                  <Ico name="check" /> {T('Save', lang)}
+                </button>
               </div>
             </div>
           </div>
@@ -572,6 +660,19 @@ export const SettingsView: React.FC<{
                   </div>
                 </div>
               ))}
+              <div className="card-save-row">
+                <button
+                  type="button"
+                  className="btn gold btn-save"
+                  onClick={() =>
+                    saveSectionSettings((base, cur) => {
+                      base.boilers = cloneSettings(cur).boilers;
+                    }, 'Boilers')
+                  }
+                >
+                  <Ico name="check" /> {T('Save', lang)}
+                </button>
+              </div>
             </div>
 
             <div className="card">
@@ -626,6 +727,19 @@ export const SettingsView: React.FC<{
                   </button>
                 </div>
               ))}
+              <div className="card-save-row">
+                <button
+                  type="button"
+                  className="btn gold btn-save"
+                  onClick={() =>
+                    saveSectionSettings((base, cur) => {
+                      base.meters = cloneSettings(cur).meters;
+                    }, 'Meters')
+                  }
+                >
+                  <Ico name="check" /> {T('Save', lang)}
+                </button>
+              </div>
             </div>
           </div>
         );
@@ -669,6 +783,19 @@ export const SettingsView: React.FC<{
                   setDraft((prev) => ({ ...prev, alerts: { ...prev.alerts, account: e.target.value } }))
                 }
               />
+            </div>
+            <div className="card-save-row">
+              <button
+                type="button"
+                className="btn gold btn-save"
+                onClick={() =>
+                  saveSectionSettings((base, cur) => {
+                    base.alerts = { ...(cur.alerts || { admin: '', manager: '', account: '' }) };
+                  }, 'Email alerts')
+                }
+              >
+                <Ico name="check" /> {T('Save', lang)}
+              </button>
             </div>
 
             <div className="h2 mt2">Alert routing</div>
@@ -726,8 +853,16 @@ export const SettingsView: React.FC<{
                 className="btn sm gold"
                 onClick={() =>
                   setUsers((prev) => [
+                    {
+                      name: '',
+                      role: 'Staff',
+                      pin: '',
+                      modules: [...OFFICE_M],
+                      active: true,
+                      units: [draft.units[0] || 'UL'],
+                      _isNew: true,
+                    },
                     ...(prev || []),
-                    { name: '', role: 'Staff', pin: '', modules: [...OFFICE_M], active: true, units: [draft.units[0] || 'UL'] },
                   ])
                 }
               >
@@ -742,7 +877,7 @@ export const SettingsView: React.FC<{
               <>
                 <div className="mt">
                   {users.map((u, idx) => (
-                    <div className="urow" key={idx}>
+                    <div className={`urow${u._isNew ? ' is-new' : ''}`} key={u._origName || `new-${idx}`}>
                       <div className="g">
                         <input
                           value={u.name}
@@ -769,7 +904,7 @@ export const SettingsView: React.FC<{
                           type="password"
                           inputMode="numeric"
                           maxLength={4}
-                          placeholder="4-digit"
+                          placeholder="4-digit PIN"
                           value={u.pin || ''}
                           onChange={(e) => {
                             const next = [...users];
@@ -832,19 +967,23 @@ export const SettingsView: React.FC<{
                         >
                           Process set
                         </button>
-                        {u.role !== 'Admin' && (
+                        {(u._isNew || u.role !== 'Admin') && (
                           <button
                             type="button"
                             className="chip"
                             style={{ color: 'var(--bad)' }}
-                            onClick={() =>
+                            onClick={() => {
+                              if (u._isNew && !u.name.trim()) {
+                                setUsers(users.filter((_, i) => i !== idx));
+                                return;
+                              }
                               onConfirm(
                                 'Remove user?',
                                 u.name || 'Delete this user?',
                                 () => setUsers(users.filter((_, i) => i !== idx)),
                                 true
-                              )
-                            }
+                              );
+                            }}
                           >
                             Delete
                           </button>
@@ -872,12 +1011,23 @@ export const SettingsView: React.FC<{
                           );
                         })}
                       </div>
+                      <div className="card-save-row">
+                        <button
+                          type="button"
+                          className="btn gold btn-save"
+                          onClick={() => handleSaveSingleUser(idx)}
+                        >
+                          <Ico name="check" /> {T('Save', lang)}
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
-                <button type="button" className="btn gold block mt2" onClick={handleSaveUsers}>
-                  <Ico name="check" /> Save users
-                </button>
+                <div className="card-save-row">
+                  <button type="button" className="btn gold btn-save" onClick={handleSaveAllUsers}>
+                    <Ico name="check" /> {T('Save all', lang)}
+                  </button>
+                </div>
               </>
             )}
           </div>
@@ -988,7 +1138,7 @@ export const SettingsView: React.FC<{
     <>
       <TopBar
         title={T('Settings', lang)}
-        sub="Masters, themes, users & backup"
+        sub="Stores, staff, lists, users & backup"
         back
         lang={lang}
         onLang={onLang}
@@ -1040,18 +1190,6 @@ export const SettingsView: React.FC<{
           </section>
         </div>
       </main>
-
-      {panel && panel !== 'users' && panel !== 'backup' && (
-        <div className="savebar">
-          <div className="row">
-            <span className="pill">{activePanelMeta?.[1]}</span>
-            <span className="grow" />
-            <button type="button" className="btn gold btn-save" onClick={handleSaveSettings}>
-              <Ico name="check" /> Save settings
-            </button>
-          </div>
-        </div>
-      )}
 
       <ModalSheet open={!!exportModal} onClose={() => setExportModal(null)}>
         {exportModal && (

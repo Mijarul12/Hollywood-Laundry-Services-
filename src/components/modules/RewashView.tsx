@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { daysBetween, fD, fLong, T } from '../../config/workshopConfig';
 import type { EntryRecord, ModuleResponse } from '../../types/workshop';
-import { DateBar, EntryList, LockNote, SaveBar, Stepper, TopBar, WhoBox } from '../CommonUI';
+import { DateBar, EntryList, LockNote, SaveBar, Stepper, TopBar } from '../CommonUI';
 import type { ModuleViewProps } from './ReleasePackView';
 
 export const RewashView: React.FC<ModuleViewProps> = ({
@@ -25,7 +25,6 @@ export const RewashView: React.FC<ModuleViewProps> = ({
   onConfirm,
 }) => {
   const isMgr = me.role === 'Admin' || me.role === 'Manager';
-  const [by, setBy] = useState('');
   const [lines, setLines] = useState<Record<string, { given: number; received: number }>>({});
 
   if (!modData) {
@@ -57,10 +56,6 @@ export const RewashView: React.FC<ModuleViewProps> = ({
   const st = modData.state || {};
 
   const handleSave = async () => {
-    if (isMgr && !by) {
-      onToast(T('Who did it?', lang), 'err');
-      return;
-    }
     const payload = kinds
       .map((k) => {
         const d = lines[k] || { given: 0, received: 0 };
@@ -71,7 +66,7 @@ export const RewashView: React.FC<ModuleViewProps> = ({
       onToast('Enter quantity', 'err');
       return;
     }
-    const r = await onApi<ModuleResponse>('rewash.save', { date, by, lines: payload });
+    const r = await onApi<ModuleResponse>('rewash.save', { date, by: me.name, lines: payload });
     onUpdateModData(r);
     setLines({});
     onToast(`✓ ${T('Saved', lang)}`, 'ok');
@@ -109,23 +104,6 @@ export const RewashView: React.FC<ModuleViewProps> = ({
         <div className="card">
           <div className="steph">
             <span className="stepn">1</span>
-            {T('Who did it?', lang)}
-          </div>
-          <div className="mt">
-            <WhoBox
-              me={me}
-              settings={settings}
-              value={by}
-              onToggle={(n) => setBy((prev) => (prev === n ? '' : n))}
-              onAddOffice={() => onAddList('teams.office')}
-              lang={lang}
-            />
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="steph">
-            <span className="stepn">2</span>
             {T('Given', lang)} / {T('Received', lang)}
           </div>
           <div className="rows rw mt">
@@ -133,8 +111,9 @@ export const RewashView: React.FC<ModuleViewProps> = ({
               const d = lines[k] || { given: 0, received: 0 };
               const bal = st[k]?.balance || 0;
               const nb = bal + Number(d.given || 0) - Number(d.received || 0);
+              const active = Boolean(d.given || d.received);
               return (
-                <div className="r" key={k}>
+                <div className={`r${active ? ' is-active' : ''}`} key={k}>
                   <div className="nm">
                     {T(k, lang)}
                     <small>
@@ -148,21 +127,19 @@ export const RewashView: React.FC<ModuleViewProps> = ({
                     {nb}
                     <small>new bal</small>
                   </div>
-                  <div className="full">
+                  <div className="rw-field">
                     <div className="mini">{T('Given', lang)}</div>
                     <Stepper
                       cls="sm"
                       value={d.given || ''}
-                      quick={[5, 10]}
                       onChange={(n) => setLines((prev) => ({ ...prev, [k]: { ...d, given: n } }))}
                     />
                   </div>
-                  <div className="full">
+                  <div className="rw-field">
                     <div className="mini">{T('Received', lang)}</div>
                     <Stepper
                       cls="sm"
                       value={d.received || ''}
-                      quick={[5, 10]}
                       onChange={(n) => setLines((prev) => ({ ...prev, [k]: { ...d, received: n } }))}
                     />
                   </div>

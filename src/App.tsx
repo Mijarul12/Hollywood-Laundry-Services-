@@ -708,11 +708,7 @@ export default function App() {
     view === 'daily' ||
     view === 'settings' ||
     view === 'grc' ||
-    view === 'meter' ||
-    view === 'repair' ||
-    view === 'spot' ||
-    view === 'quickfix' ||
-    view === 'washerr';
+    view === 'meter';
 
   return (
     <>

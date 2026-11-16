@@ -207,9 +207,10 @@ export const SaveBar: React.FC<{
   unit: string;
   label?: string;
   disabled?: boolean;
+  inline?: boolean;
   onSave: () => void;
-}> = ({ meName, unit, label, disabled, onSave }) => (
-  <div className="savebar">
+}> = ({ meName, unit, label, disabled, inline, onSave }) => (
+  <div className={inline ? 'savebar-inline' : 'savebar'}>
     <div className="row">
       <span className="pill">
         {meName} · {unit}
@@ -228,7 +229,7 @@ export const Stepper: React.FC<{
   cls?: string;
   min?: number;
   quick?: number[];
-}> = ({ value, onChange, cls = '', min = 0, quick }) => {
+}> = ({ value, onChange, cls = '', min = 0 }) => {
   const numVal = Number(value || 0);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -238,31 +239,24 @@ export const Stepper: React.FC<{
   };
 
   return (
-    <div className={quick?.length ? 'stepq' : undefined}>
-      <div className={`step ${cls}`}>
-        <button type="button" onClick={() => step(-1)}>
-          −
-        </button>
-        <input
-          ref={inputRef}
-          inputMode="numeric"
-          pattern="[0-9]*"
-          value={value == null || value === '' ? '' : String(value)}
-          onFocus={() => setTimeout(() => inputRef.current?.select(), 0)}
-          onChange={(e) => {
-            const raw = e.target.value.replace(/\D/g, '');
-            onChange(raw === '' ? min : Math.max(min, Number(raw)));
-          }}
-        />
-        <button type="button" onClick={() => step(1)}>
-          +
-        </button>
-      </div>
-      {quick?.map((q) => (
-        <button key={q} type="button" className="qk" onClick={() => step(q)}>
-          +{q}
-        </button>
-      ))}
+    <div className={`step ${cls}`}>
+      <button type="button" onClick={() => step(-1)}>
+        −
+      </button>
+      <input
+        ref={inputRef}
+        inputMode="numeric"
+        pattern="[0-9]*"
+        value={value == null || value === '' ? '' : String(value)}
+        onFocus={() => setTimeout(() => inputRef.current?.select(), 0)}
+        onChange={(e) => {
+          const raw = e.target.value.replace(/\D/g, '');
+          onChange(raw === '' ? min : Math.max(min, Number(raw)));
+        }}
+      />
+      <button type="button" onClick={() => step(1)}>
+        +
+      </button>
     </div>
   );
 };

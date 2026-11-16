@@ -30,26 +30,110 @@ export async function apiCall<T = any>(
   return json.data as T;
 }
 
-export function shrinkImage(file: File, max = 1100, quality = 0.72): Promise<string> {
+export interface PreparedPhoto {
+  base64: string;
+  sha256: string;
+  dhash: string;
+}
+
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  if (typeof crypto !== 'undefined' && crypto.subtle) {
+    const copy = new Uint8Array(bytes.byteLength);
+    copy.set(bytes);
+    const digest = await crypto.subtle.digest('SHA-256', copy);
+    return Array.from(new Uint8Array(digest))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+  }
+  let h1 = 0x811c9dc5;
+  let h2 = 0x01000193;
+  for (let i = 0; i < bytes.length; i++) {
+    h1 ^= bytes[i];
+    h1 = Math.imul(h1, 0x01000193);
+    h2 ^= bytes[i] ^ (i & 0xff);
+    h2 = Math.imul(h2, 0x85ebca6b);
+  }
+  return `${(h1 >>> 0).toString(16).padStart(8, '0')}${(h2 >>> 0).toString(16).padStart(8, '0')}`;
+}
+
+function computeDHash(img: HTMLImageElement): string {
+  const w = 9;
+  const h = 8;
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext('2d');
+  if (!ctx) return '';
+  ctx.drawImage(img, 0, 0, w, h);
+  const data = ctx.getImageData(0, 0, w, h).data;
+  const gray = (x: number, y: number) => {
+    const idx = (y * w + x) * 4;
+    return data[idx] * 0.299 + data[idx + 1] * 0.587 + data[idx + 2] * 0.114;
+  };
+  let bits = '';
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w - 1; x++) {
+      bits += gray(x, y) > gray(x + 1, y) ? '1' : '0';
+    }
+  }
+  let hex = '';
+  for (let i = 0; i < bits.length; i += 4) {
+    hex += parseInt(bits.slice(i, i + 4), 2).toString(16);
+  }
+  return hex;
+}
+
+export function dHashDistance(a: string, b: string): number {
+  if (!a || !b || a.length !== b.length) return 64;
+  let dist = 0;
+  for (let i = 0; i < a.length; i++) {
+    let x = parseInt(a[i], 16) ^ parseInt(b[i], 16);
+    while (x) {
+      dist += x & 1;
+      x >>= 1;
+    }
+  }
+  return dist;
+}
+
+export function isSamePhotoFingerprint(
+  a: { sha256?: string; dhash?: string },
+  b: { sha256?: string; dhash?: string }
+): boolean {
+  if (a.sha256 && b.sha256 && a.sha256 === b.sha256) return true;
+  if (a.dhash && b.dhash && dHashDistance(a.dhash, b.dhash) <= 3) return true;
+  return false;
+}
+
+export function preparePhotoUpload(file: File, max = 1100, quality = 0.72): Promise<PreparedPhoto> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const img = new Image();
-    img.onload = () => {
-      const w = img.width;
-      const h = img.height;
-      const s = Math.min(1, max / Math.max(w, h));
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.round(w * s);
-      canvas.height = Math.round(h * s);
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
+    img.onload = async () => {
+      try {
+        const w = img.width;
+        const h = img.height;
+        const s = Math.min(1, max / Math.max(w, h));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(w * s);
+        canvas.height = Math.round(h * s);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          URL.revokeObjectURL(url);
+          reject(new Error('Canvas not supported'));
+          return;
+        }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const dhash = computeDHash(img);
+        const base64 = canvas.toDataURL('image/jpeg', quality).split(',')[1];
+        const rawBytes = Uint8Array.from(atob(base64), (ch) => ch.charCodeAt(0));
+        const sha256 = await sha256Hex(rawBytes);
         URL.revokeObjectURL(url);
-        reject(new Error('Canvas not supported'));
-        return;
+        resolve({ base64, sha256, dhash });
+      } catch (err) {
+        URL.revokeObjectURL(url);
+        reject(err);
       }
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      URL.revokeObjectURL(url);
-      resolve(canvas.toDataURL('image/jpeg', quality).split(',')[1]);
     };
     img.onerror = () => {
       URL.revokeObjectURL(url);
@@ -57,6 +141,10 @@ export function shrinkImage(file: File, max = 1100, quality = 0.72): Promise<str
     };
     img.src = url;
   });
+}
+
+export function shrinkImage(file: File, max = 1100, quality = 0.72): Promise<string> {
+  return preparePhotoUpload(file, max, quality).then((r) => r.base64);
 }
 
 function toISO(raw: unknown): string {

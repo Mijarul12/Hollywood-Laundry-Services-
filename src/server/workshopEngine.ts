@@ -617,11 +617,11 @@ function sendAlert(u: InternalUser, kind: string, date: string, unit: string, ro
 
 const HOOK: Record<string, (u: InternalUser, unit: string, x: Record<string, any>, date: string) => { store: string; summary: string; data: Record<string, any> }> = {
   rp(u, _unit, x) {
-    const names = isMgr(u) ? ((x.names as string[]) || []).map(str).filter(Boolean) : [u.name];
+    const rawNames = ((x.names as string[]) || []).map(str).filter(Boolean);
+    const names = rawNames.length ? rawNames : [u.name];
     if (!str(x.round) || !str(x.store) || !['Release', 'Pack'].includes(x.type)) {
       throw new Error('Choose round, store and Release / Pack');
     }
-    if (!names.length) throw new Error('Choose at least one name');
     const d = { round: str(x.round), type: x.type, names };
     return { store: str(x.store), summary: `${d.round} · ${x.store} · ${x.type} · ${names.join(', ')}`, data: d };
   },
@@ -645,15 +645,67 @@ const HOOK: Record<string, (u: InternalUser, unit: string, x: Record<string, any
       };
     }
     need3(x, ['garment', 'karigar']);
-    const rawPhotos = Array.isArray(x.photos) ? x.photos : x.photo ? [x.photo] : [];
-    const photos = rawPhotos.map(str).filter(Boolean).slice(0, 2);
-    if (!photos.length) throw new Error('Take a photo of the garment');
+    const angleKeys = ['front', 'back', 'left', 'right'] as const;
+    const rawAngles = x.photoAngles && typeof x.photoAngles === 'object' ? (x.photoAngles as Record<string, any>) : null;
+    const photoAngles: Record<string, string> = {};
+    if (rawAngles) {
+      for (const k of angleKeys) {
+        const val = str(rawAngles[k]);
+        if (val) photoAngles[k] = val;
+      }
+    }
+    const anglePhotos = angleKeys.map((k) => photoAngles[k]).filter(Boolean);
+    const rawPhotos = anglePhotos.length ? anglePhotos : Array.isArray(x.photos) ? x.photos : x.photo ? [x.photo] : [];
+    const photos = rawPhotos.map(str).filter(Boolean).slice(0, 8);
+    if (photos.length < 1) throw new Error('Upload at least 1 photo of the garment');
+    if (new Set(photos).size !== photos.length) {
+      throw new Error('Same photo cannot be uploaded twice — upload a new different photo');
+    }
+    const photoSha = (id: string): string => {
+      const p = path.join(PHOTOS_DIR, `${id}.jpg`);
+      if (!fs.existsSync(p)) return '';
+      return crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');
+    };
+    const currentHashes = photos.map(photoSha).filter(Boolean);
+    if (new Set(currentHashes).size !== currentHashes.length) {
+      throw new Error('Duplicate photo detected — upload different photos for each angle');
+    }
+    const priorEntries = eRange(addDays(date, -WINDOW_DAYS), addDays(date, 1), 'wn', 'ALL').filter(
+      (e) => e.data.kind === 'garment'
+    );
+    const usedIds = new Set<string>();
+    const usedHashes = new Set<string>();
+    for (const pe of priorEntries) {
+      const pids: string[] = Array.isArray(pe.data.photos)
+        ? pe.data.photos
+        : pe.data.photo
+          ? [pe.data.photo]
+          : [];
+      for (const pid of pids) {
+        if (pid) usedIds.add(String(pid));
+      }
+      const phs: string[] = Array.isArray(pe.data.photoHashes) ? pe.data.photoHashes : [];
+      for (const h of phs) {
+        if (h) usedHashes.add(String(h));
+      }
+    }
+    if (photos.some((pid) => usedIds.has(pid)) || currentHashes.some((h) => usedHashes.has(h))) {
+      throw new Error('This photo was already uploaded before — please upload a new photo');
+    }
+    if (!Object.keys(photoAngles).length) {
+      photos.forEach((pid, idx) => {
+        if (angleKeys[idx]) photoAngles[angleKeys[idx]] = pid;
+      });
+    }
     const d = {
       kind: 'garment',
       garment: str(x.garment),
       karigar: str(x.karigar),
       photo: photos[0],
       photos,
+      photoAngles,
+      photoHashes: currentHashes,
+      photoDHashes: Array.isArray(x.photoDHashes) ? x.photoDHashes.map(str).filter(Boolean) : [],
       note: str(x.note),
       status: 'Pending',
     };
@@ -679,25 +731,25 @@ const HOOK: Record<string, (u: InternalUser, unit: string, x: Record<string, any
     };
     return { store: str(x.store), summary: `${x.store} · ${d.tag} · ${d.garment} · ${d.damage} → ${d.sentTo}`, data: d };
   },
-  spot(_u, _unit, x) {
-    need3(x, ['store', 'garment', 'spot', 'tag', 'by']);
+  spot(u, _unit, x) {
+    need3(x, ['store', 'garment', 'spot', 'tag']);
     const d = {
       garment: str(x.garment),
       spot: str(x.spot),
       tag: str(x.tag).toUpperCase(),
       pct: Math.max(0, Math.min(100, Math.round(num(x.pct)))),
-      by: str(x.by),
+      by: str(x.by) || u.name,
     };
     return { store: str(x.store), summary: `${x.store} · ${d.tag} · ${d.garment} · ${d.spot} → ${d.pct}%`, data: d };
   },
-  quickfix(_u, _unit, x) {
-    need3(x, ['store', 'garment', 'repair', 'kind', 'tag', 'by']);
+  quickfix(u, _unit, x) {
+    need3(x, ['store', 'garment', 'repair', 'kind', 'tag']);
     const d = {
       garment: str(x.garment),
       repair: str(x.repair),
       kind: x.kind === 'IR' ? 'IR' : 'QF',
       tag: str(x.tag).toUpperCase(),
-      by: str(x.by),
+      by: str(x.by) || u.name,
     };
     return { store: str(x.store), summary: `${x.store} · ${d.tag} · ${d.garment} · ${d.repair} (${d.kind})`, data: d };
   },
@@ -1583,8 +1635,7 @@ export function handleApi(reqBody: { action?: string; token?: string; p?: Record
         need(u, 'rewash');
         const unit = unitFor(u, p);
         const date = dateFor(u, p.date);
-        const by = isMgr(u) ? str(p.by) : u.name;
-        if (!by) throw new Error('Choose who did it');
+        const by = str(p.by) || u.name;
         const lines = ((p.lines as Record<string, any>[]) || [])
           .map((l) => ({
             kind: str(l.kind),
@@ -1773,9 +1824,10 @@ export function handleApi(reqBody: { action?: string; token?: string; p?: Record
         const b64 = String(p.data);
         const buf = Buffer.from(b64, 'base64');
         if (buf.length > 6 * 1024 * 1024) throw new Error('Photo too big');
+        const hash = crypto.createHash('sha256').update(buf).digest('hex');
         fs.writeFileSync(path.join(PHOTOS_DIR, `${id}.jpg`), buf);
         queuePhotoUpsert(id, b64);
-        return { ok: true, data: { id, url: `/photo/${id}` } };
+        return { ok: true, data: { id, url: `/photo/${id}`, hash } };
       }
 
       case 'boiler.tap': {

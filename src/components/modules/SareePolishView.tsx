@@ -172,7 +172,6 @@ export const SareePolishView: React.FC<ModuleViewProps> = ({
             <label className="lbl">{T('Quantity (pcs)', lang)}</label>
             <Stepper
               value={sendForm.qty}
-              quick={[5, 10]}
               onChange={(n) => setSendForm((p) => ({ ...p, qty: n }))}
             />
             <label className="lbl">
